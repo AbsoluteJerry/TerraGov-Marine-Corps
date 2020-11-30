@@ -1,23 +1,10 @@
-/mob/living/carbon/proc/getHalLoss()
-	return halloss
-
-/mob/living/carbon/adjustHalLoss(amount)
-	if(status_flags & GODMODE)
-		return FALSE	//godmode
-	halloss = CLAMP(halloss + amount, 0, maxHealth * 2)
-
-/mob/living/carbon/proc/setHalLoss(amount)
-	if(status_flags & GODMODE)
-		return FALSE	//godmode
-	halloss = amount
-
 /mob/living/carbon/proc/getTraumatic_Shock()
 	return traumatic_shock
 
 /mob/living/carbon/proc/adjustTraumatic_Shock(amount)
 	if(status_flags & GODMODE)
 		return FALSE	//godmode
-	traumatic_shock = CLAMP(traumatic_shock+amount,0,maxHealth*2)
+	traumatic_shock = clamp(traumatic_shock+amount,0,maxHealth*2)
 
 /mob/living/carbon/proc/setTraumatic_Shock(amount)
 	if(status_flags & GODMODE)
@@ -31,7 +18,7 @@
 	if(status_flags & GODMODE)
 		return FALSE	//godmode
 	. = shock_stage
-	shock_stage = CLAMP(shock_stage + amount, 0, maxHealth * 2)
+	shock_stage = clamp(shock_stage + amount, 0, maxHealth * 2)
 	adjust_pain_speed_mod(.)
 
 /mob/living/carbon/proc/setShock_Stage(amount)
@@ -108,26 +95,10 @@
 	traumatic_shock += reagent_pain_modifier
 	traumatic_shock = max(0, traumatic_shock)	//stuff below this has the potential to mask damage
 
-	traumatic_shock += 1.5 * halloss //not affected by reagent shock reduction
+	traumatic_shock += 1.5 //not affected by reagent shock reduction
 
 
 	return traumatic_shock
 
 /mob/living/carbon/proc/handle_shock()
 	updateshock()
-
-/mob/living/carbon/proc/halloss_recovery()
-	if(stat == DEAD)
-		setHalLoss(0)
-		return
-	var/rate = BASE_HALLOSS_RECOVERY_RATE
-
-	if(lying_angle || last_move_intent < world.time - 20) //If we're standing still or knocked down we benefit from the downed halloss rate
-		if(resting || IsSleeping()) //we're deliberately resting, comfortably taking a breather
-			rate = REST_HALLOSS_RECOVERY_RATE
-		else
-			rate = DOWNED_HALLOSS_RECOVERY_RATE
-	else if(m_intent == MOVE_INTENT_WALK)
-		rate = WALK_HALLOSS_RECOVERY_RATE
-
-	adjustHalLoss(rate)

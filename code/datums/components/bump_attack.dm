@@ -23,7 +23,6 @@
 	if(active)
 		RegisterSignal(parent, COMSIG_MOVABLE_BUMP, bump_action_path)
 
-
 /datum/component/bump_attack/Destroy(force, silent)
 	QDEL_NULL(toggle_action)
 	return ..()
@@ -41,6 +40,8 @@
 
 
 /datum/component/bump_attack/proc/living_bump_action_checks(atom/target)
+	if(TIMER_COOLDOWN_CHECK(src, COOLDOWN_BUMP_ATTACK))
+		return NONE
 	var/mob/living/bumper = parent
 	if(!isliving(target) || bumper.throwing || bumper.incapacitated())
 		return NONE
@@ -59,6 +60,7 @@
 
 
 /datum/component/bump_attack/proc/living_bump_action(datum/source, atom/target)
+	SIGNAL_HANDLER
 	. = living_bump_action_checks(target)
 	if(!isnull(.))
 		return
@@ -66,6 +68,7 @@
 
 
 /datum/component/bump_attack/proc/human_bump_action(datum/source, atom/target)
+	SIGNAL_HANDLER
 	var/mob/living/carbon/human/bumper = parent
 	. = carbon_bump_action_checks(target)
 	if(!isnull(.))
@@ -77,6 +80,7 @@
 
 
 /datum/component/bump_attack/proc/xeno_bump_action(datum/source, atom/target)
+	SIGNAL_HANDLER
 	var/mob/living/carbon/xenomorph/bumper = parent
 	. = carbon_bump_action_checks(target)
 	if(!isnull(.))
@@ -91,4 +95,7 @@
 	if(bumper.next_move > world.time)
 		return COMPONENT_BUMP_RESOLVED //We don't want to push people while on attack cooldown.
 	bumper.UnarmedAttack(target, TRUE)
+	GLOB.round_statistics.xeno_bump_attacks++
+	SSblackbox.record_feedback("tally", "round_statistics", 1, "xeno_bump_attacks")
+	TIMER_COOLDOWN_START(src, COOLDOWN_BUMP_ATTACK, CLICK_CD_MELEE)
 	return COMPONENT_BUMP_RESOLVED

@@ -5,11 +5,11 @@ GLOBAL_LIST_INIT(exp_jobsmap, list(
 	EXP_TYPE_MEDICAL = list("titles" = GLOB.jobs_medical),
 	EXP_TYPE_MARINES = list("titles" = GLOB.jobs_marines),
 	EXP_TYPE_REQUISITIONS = list("titles" = GLOB.jobs_requisitions),
-	EXP_TYPE_POLICE = list("titles" = GLOB.jobs_police)
 ))
 
 GLOBAL_LIST_INIT(exp_specialmap, list(
 	EXP_TYPE_LIVING = list(),
+	EXP_TYPE_SPECIAL = list(ROLE_XENOMORPH, ROLE_XENO_QUEEN),
 	EXP_TYPE_GHOST = list(),
 	EXP_TYPE_ADMIN = list()
 ))
@@ -27,7 +27,7 @@ GLOBAL_PROTECT(exp_specialmap)
 
 	var/department_head = list()
 
-	var/faction = "None"
+	var/faction = FACTION_NEUTRAL
 
 	var/total_positions = 0
 	var/current_positions = 0
@@ -51,7 +51,7 @@ GLOBAL_PROTECT(exp_specialmap)
 
 	var/display_order = JOB_DISPLAY_ORDER_DEFAULT
 	var/job_flags = NONE
-	
+
 	var/list/jobworth = list() //Associative list of indexes increased when someone joins as this job.
 
 /datum/job/New()
@@ -143,8 +143,8 @@ GLOBAL_PROTECT(exp_specialmap)
 /datum/job/proc/radio_help_message(mob/M)
 	to_chat(M, {"
 <span class='role_body'>|______________________|</span>
-<span class='role_header'>You are a: [title]!</span>
-<span class='role_body'>As a [title] you answer to [supervisors]. Special circumstances may change this.</span>
+<span class='role_header'>You are \an [title]!</span>
+<span class='role_body'>As \an <b>[title]</b> you answer to [supervisors]. Special circumstances may change this.</span>
 <span class='role_body'>|______________________|</span>
 "})
 	if(!(job_flags & JOB_FLAG_NOHEADSET))
@@ -212,7 +212,7 @@ GLOBAL_PROTECT(exp_specialmap)
 	if(total_positions >= max_positions)
 		return
 	if(job_points >= job_points_needed )
-		job_points -= job_points_needed 
+		job_points -= job_points_needed
 		add_job_positions(1)
 
 /datum/job/proc/add_job_positions(amount)
@@ -275,10 +275,10 @@ GLOBAL_PROTECT(exp_specialmap)
 		job.outfit.handle_id(src)
 		job.outfit.equip(src)
 
-	if(job.job_flags & JOB_FLAG_ALLOWS_PREFS_GEAR)
+	if((job.job_flags & JOB_FLAG_ALLOWS_PREFS_GEAR) && player)
 		equip_preference_gear(player)
 
-	if(!src.assigned_squad)
+	if(!src.assigned_squad && assigned_squad)
 		job.equip_spawning_squad(src, assigned_squad, player)
 
 

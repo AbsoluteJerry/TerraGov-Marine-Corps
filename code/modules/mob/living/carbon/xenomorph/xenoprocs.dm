@@ -5,6 +5,39 @@
 
 	check_hive_status(src)
 
+/mob/living/carbon/xenomorph/verb/tunnel_list()
+	set name = "Tunnel List"
+	set desc = "See all currently active tunnels."
+	set category = "Alien"
+
+	check_tunnel_list(src)
+
+
+/proc/check_tunnel_list(mob/user) //Creates a handy list of all xeno tunnels
+	var/dat = "<br>"
+
+	var/datum/hive_status/hive
+	if(isxeno(user))
+		var/mob/living/carbon/xenomorph/xeno_user = user
+		if(xeno_user.hive)
+			hive = xeno_user.hive
+	else
+		hive = GLOB.hive_datums[XENO_HIVE_NORMAL]
+
+	if(!hive)
+		CRASH("couldnt find a hive in check_tunnel_list")
+
+	dat += "<b>List of Hive Tunnels:</b><BR>"
+
+	for(var/obj/structure/tunnel/T in GLOB.xeno_tunnels)
+		if(T.creator.hive == hive)
+			dat += "<b>[T.name]</b> located at: <b><font color=green>([T.tunnel_desc])</b></font><BR>"
+
+	var/datum/browser/popup = new(user, "roundstatus", "<div align='center'>Tunnel List</div>", 600, 600)
+	popup.set_content(dat)
+	popup.open(FALSE)
+
+
 
 /proc/xeno_status_output(list/xenolist, can_overwatch = FALSE, ignore_leads = TRUE, user)
 	var/xenoinfo = ""
@@ -19,11 +52,18 @@
 			xenoinfo += "<tr><td>[leadprefix][X.name] "
 		if(!X.client)
 			xenoinfo += " <i>(SSD)</i>"
-		else if(X.client.prefs.xeno_name && X.client.prefs.xeno_name != "Undefined")
-			xenoinfo += "- [X.client.prefs.xeno_name]"
+
+		var/hp_color = "green"
+		switch(X.health/X.maxHealth)
+			if(0.33 to 0.66)
+				hp_color = "orange"
+			if(0 to 0.33)
+				hp_color = "red"
+
+		xenoinfo += " <b><font color=[hp_color]>Health: ([X.health]/[X.maxHealth])</font></b>"
 
 		var/area/A = get_area(X)
-		xenoinfo += " <b><font color=green>([A ? A.name : null])</b></td></tr>"
+		xenoinfo += " <b><font color=green>([A ? A.name : null], X: [X.x], Y: [X.y])</b></td></tr>"
 
 	return xenoinfo
 
@@ -78,10 +118,12 @@
 	xenoinfo += xeno_status_output(hive.xenos_by_typepath[/mob/living/carbon/xenomorph/larva], can_overwatch, TRUE, user)
 
 	var/hivemind_text = length(hive.xenos_by_typepath[/mob/living/carbon/xenomorph/hivemind]) > 0 ? "Active" : "Inactive"
+	var/xeno_tier_three_cap = CEILING(max(length(hive.xenos_by_tier[XENO_TIER_THREE]),(length(hive.xenos_by_tier[XENO_TIER_ZERO])+length(hive.xenos_by_tier[XENO_TIER_ONE])+length(hive.xenos_by_tier[XENO_TIER_TWO]))/3),1)
+	var/xeno_tier_two_cap = max(length(hive.xenos_by_tier[XENO_TIER_TWO]),length(hive.xenos_by_tier[XENO_TIER_ZERO])+length(hive.xenos_by_tier[XENO_TIER_ONE])-length(hive.xenos_by_tier[XENO_TIER_THREE]))
 
 	dat += "<b>Total Living Sisters: [hive.get_total_xeno_number()]</b><BR>"
-	dat += "<b>Tier 3: [length(hive.xenos_by_tier[XENO_TIER_THREE])] Sisters</b>[tier3counts]<BR>"
-	dat += "<b>Tier 2: [length(hive.xenos_by_tier[XENO_TIER_TWO])] Sisters</b>[tier2counts]<BR>"
+	dat += "<b>Tier 3: ([length(hive.xenos_by_tier[XENO_TIER_THREE])]/[xeno_tier_three_cap]) Sisters</b>[tier3counts]<BR>"
+	dat += "<b>Tier 2: ([length(hive.xenos_by_tier[XENO_TIER_TWO])]/[xeno_tier_two_cap]) Sisters</b>[tier2counts]<BR>"
 	dat += "<b>Tier 1: [length(hive.xenos_by_tier[XENO_TIER_ONE])] Sisters</b>[tier1counts]<BR>"
 	dat += "<b>Larvas: [length(hive.xenos_by_typepath[/mob/living/carbon/xenomorph/larva])] Sisters<BR>"
 	dat += "<b>Hivemind: [hivemind_text]<BR>"
@@ -91,7 +133,7 @@
 	dat += "<table cellspacing=4>"
 	dat += xenoinfo
 	dat += "</table>"
-	var/datum/browser/popup = new(user, "roundstatus", "<div align='center'>Hive Status</div>", 600, 600)
+	var/datum/browser/popup = new(user, "roundstatus", "<div align='center'>Hive Status</div>", 650, 650)
 	popup.set_content(dat)
 	popup.open(FALSE)
 
@@ -255,13 +297,13 @@
 		if(client && ckey) // pause for ssd/ghosted
 			if(!hive?.living_xeno_ruler || hive.living_xeno_ruler.loc.z == loc.z)
 				if(upgrade_stored >= xeno_caste.upgrade_threshold)
-					if(health == maxHealth && !incapacitated() && !handcuffed && !legcuffed)
+					if(health == maxHealth && !incapacitated() && !handcuffed)
 						upgrade_xeno(upgrade_next())
 				else
 					// Upgrade is increased based on marine to xeno population taking stored_larva as a modifier.
 					var/datum/job/xeno_job = SSjob.GetJobType(/datum/job/xenomorph)
 					var/stored_larva = xeno_job.total_positions - xeno_job.current_positions
-					var/upgrade_points = 1 + (FLOOR(stored_larva / 3, 1))
+					var/upgrade_points = 1 + (stored_larva/6)
 					upgrade_stored = min(upgrade_stored + upgrade_points, xeno_caste.upgrade_threshold)
 
 /mob/living/carbon/xenomorph/proc/update_evolving()
@@ -292,83 +334,29 @@
 /mob/living/carbon/xenomorph/throw_impact(atom/hit_atom, speed)
 	set waitfor = 0
 
+	// TODO: remove charge_type check
 	if(!xeno_caste.charge_type || stat || (!throwing && usedPounce)) //No charge type, unconscious or dead, or not throwing but used pounce.
 		..() //Do the parent instead.
 		return FALSE
 
 	if(isobj(hit_atom)) //Deal with smacking into dense objects. This overwrites normal throw code.
 		var/obj/O = hit_atom
-		if(!O.density) return FALSE//Not a dense object? Doesn't matter then, pass over it.
-		if(!O.anchored) step(O, dir) //Not anchored? Knock the object back a bit. Ie. canisters.
-
-		switch(xeno_caste.charge_type) //Determine how to handle it depending on charge type.
-			if(CHARGE_TYPE_SMALL to CHARGE_TYPE_MEDIUM)
-				if(!istype(O, /obj/structure/table) && !istype(O, /obj/structure/rack))
-					O.hitby(src, speed) //This resets throwing.
-			if(CHARGE_TYPE_LARGE to CHARGE_TYPE_MASSIVE)
-				if(istype(O, /obj/structure/table) || istype(O, /obj/structure/rack))
-					var/obj/structure/S = O
-					visible_message("<span class='danger'>[src] plows straight through [S]!</span>", null, null, 5)
-					S.deconstruct(FALSE) //We want to continue moving, so we do not reset throwing.
-				else O.hitby(src, speed) //This resets throwing.
+		if(!O.density)
+			return FALSE//Not a dense object? Doesn't matter then, pass over it.
+		if(!O.anchored)
+			step(O, dir) //Not anchored? Knock the object back a bit. Ie. canisters.
+		SEND_SIGNAL(src, COMSIG_XENO_OBJ_THROW_HIT, O, speed)
 		return TRUE
 
-	if(ismob(hit_atom)) //Hit a mob! This overwrites normal throw code.
-		var/mob/living/carbon/M = hit_atom
-		if(!M.stat && !isxeno(M))
-			switch(xeno_caste.charge_type)
-				if(CHARGE_TYPE_SMALL to CHARGE_TYPE_MEDIUM)
-					if(ishuman(M) && (M.dir in reverse_nearby_direction(dir)))
-						var/mob/living/carbon/human/H = M
-						if(!H.check_shields(COMBAT_TOUCH_ATTACK, 30, "melee"))
-							Paralyze(6 SECONDS)
-							throwing = FALSE //Reset throwing manually.
-							return FALSE
-
-					visible_message("<span class='danger'>[src] pounces on [M]!</span>",
-									"<span class='xenodanger'>We pounce on [M]!</span>", null, 5)
-					M.Paralyze(20)
-					step_to(src, M)
-					stop_movement()
-					if(savage) //If Runner Savage is toggled on, attempt to use it.
-						if(!savage_used)
-							if(plasma_stored >= 10)
-								Savage(M)
-							else
-								to_chat(src, "<span class='xenodanger'>We attempt to savage our victim, but we need [10-plasma_stored] more plasma.</span>")
-						else
-							to_chat(src, "<span class='xenodanger'>We attempt to savage our victim, but we aren't yet ready.</span>")
-
-					if(xeno_caste.charge_type == CHARGE_TYPE_MEDIUM)
-						if(stealth_router(HANDLE_STEALTH_CHECK))
-							M.adjust_stagger(3)
-							M.add_slowdown(1)
-							to_chat(src, "<span class='xenodanger'>Pouncing from the shadows, we stagger our victim.</span>")
-					playsound(loc, rand(0, 100) < 95 ? 'sound/voice/alien_pounce.ogg' : 'sound/voice/alien_pounce2.ogg', 25, 1)
-					addtimer(CALLBACK(src, .proc/reset_movement), xeno_caste.charge_type == 1 ? 5 : 15)
-
-				if(CHARGE_TYPE_LARGE) //Ravagers plow straight through humans; we only stop on hitting a dense turf
-					return FALSE
-		SEND_SIGNAL(src, COMSIG_XENOMORPH_THROW_HIT, hit_atom)
-		throwing = FALSE //Resert throwing since something was hit.
-		reset_movement()
+	if(isliving(hit_atom)) //Hit a mob! This overwrites normal throw code.
+		if(SEND_SIGNAL(src, COMSIG_XENO_LIVING_THROW_HIT, hit_atom) & COMPONENT_KEEP_THROWING)
+			return FALSE
+		set_throwing(FALSE) //Resert throwing since something was hit.
 		return TRUE
-	throwing = FALSE //Resert throwing since something was hit.
-	reset_movement()
+	SEND_SIGNAL(src, COMSIG_XENO_NONE_THROW_HIT)
+	set_throwing(FALSE) //Resert throwing since something was hit.
 	return ..() //Do the parent otherwise, for turfs.
 
-/mob/living/carbon/xenomorph/proc/reset_movement()
-	set_frozen(FALSE)
-	update_canmove()
-
-/mob/living/carbon/xenomorph/proc/stop_movement()
-	set_frozen(TRUE)
-	update_canmove()
-
-/mob/living/carbon/xenomorph/set_frozen(freeze = TRUE)
-	if(fortify && !freeze)
-		return FALSE
-	return ..()
 
 //Bleuugh
 
@@ -507,9 +495,6 @@
 	ammo = GLOB.ammo_list[xeno_caste.spit_types[1]] //No matching projectile time; default to first spit type
 	return
 
-/mob/living/carbon/xenomorph/proc/stealth_router(code = 0)
-	return FALSE
-
 /mob/living/carbon/xenomorph/proc/handle_decay()
 	if(prob(7+(3*tier)+(3*upgrade_as_number()))) // higher level xenos decay faster, higher plasma storage.
 		use_plasma(min(rand(1,2), plasma_stored))
@@ -523,7 +508,7 @@
 /obj/structure/acid_spray_act(mob/living/carbon/xenomorph/X)
 	if(!is_type_in_typecache(src, GLOB.acid_spray_hit))
 		return TRUE // normal density flag
-	take_damage(rand(40,60) + SPRAY_STRUCTURE_UPGRADE_BONUS(X))
+	take_damage(X.xeno_caste.acid_spray_structure_damage, "acid", "acid")
 	return TRUE // normal density flag
 
 /obj/structure/razorwire/acid_spray_act(mob/living/carbon/xenomorph/X)
@@ -531,21 +516,25 @@
 	return FALSE // not normal density flag
 
 /obj/vehicle/multitile/root/cm_armored/acid_spray_act(mob/living/carbon/xenomorph/X)
-	take_damage_type(rand(40,60) + SPRAY_STRUCTURE_UPGRADE_BONUS(X), "acid", src)
+	take_damage_type(X.xeno_caste.acid_spray_structure_damage, "acid", src)
 	healthcheck()
 	return TRUE
 
 /mob/living/carbon/acid_spray_act(mob/living/carbon/xenomorph/X)
+	ExtinguishMob()
 	if(isnestedhost(src))
 		return
+
+	if(TIMER_COOLDOWN_CHECK(src, COOLDOWN_ACID))
+		return
+	TIMER_COOLDOWN_START(src, COOLDOWN_ACID, 2 SECONDS)
 
 	if(isxenopraetorian(X))
 		GLOB.round_statistics.praetorian_spray_direct_hits++
 		SSblackbox.record_feedback("tally", "round_statistics", 1, "praetorian_spray_direct_hits")
 
-	cooldowns[COOLDOWN_ACID] = addtimer(VARSET_LIST_CALLBACK(cooldowns, COOLDOWN_ACID, null), 2 SECONDS)
-	var/armor_block = run_armor_check("chest", "acid")
-	var/damage = rand(30,40) + SPRAY_MOB_UPGRADE_BONUS(X)
+	var/armor_block = run_armor_check(BODY_ZONE_CHEST, "acid")
+	var/damage = X.xeno_caste.acid_spray_damage_on_hit
 	apply_acid_spray_damage(damage, armor_block)
 	to_chat(src, "<span class='xenodanger'>\The [X] showers you in corrosive acid!</span>")
 
@@ -554,14 +543,16 @@
 	UPDATEHEALTH(src)
 
 /mob/living/carbon/human/apply_acid_spray_damage(damage, armor_block)
-	take_overall_damage(0, damage, armor_block)
+	take_overall_damage_armored(damage, BURN, "acid")
 	UPDATEHEALTH(src)
 	emote("scream")
 	Paralyze(20)
 
 /mob/living/carbon/xenomorph/acid_spray_act(mob/living/carbon/xenomorph/X)
-	return
+	ExtinguishMob()
 
+/obj/flamer_fire/acid_spray_act(mob/living/carbon/xenomorph/X)
+	Destroy()
 
 // Vent Crawl
 /mob/living/carbon/xenomorph/proc/vent_crawl()
@@ -573,61 +564,6 @@
 	var/pipe = start_ventcrawl()
 	if(pipe)
 		handle_ventcrawl(pipe)
-
-/mob/living/carbon/xenomorph/proc/xeno_salvage_plasma(atom/A, amount, salvage_delay, max_range)
-	if(!isxeno(A) || !check_state() || A == src)
-		return
-
-	var/mob/living/carbon/xenomorph/target = A
-
-	if(!isturf(loc))
-		to_chat(src, "<span class='warning'>We can't salvage plasma from here!</span>")
-		return
-
-	if(plasma_stored >= xeno_caste.plasma_max)
-		to_chat(src, "<span class='notice'>Our plasma reserves are already at full capacity and can't hold any more.</span>")
-		return
-
-	if(target.stat != DEAD)
-		to_chat(src, "<span class='warning'>We can't steal plasma from living sisters, ask for some to a drone or a hivelord instead!</span>")
-		return
-
-	if(get_dist(src, target) > max_range)
-		to_chat(src, "<span class='warning'>We need to be closer to [target].</span>")
-		return
-
-	if(!(target.plasma_stored))
-		to_chat(src, "<span class='notice'>[target] doesn't have any plasma left to salvage.</span>")
-		return
-
-	to_chat(src, "<span class='notice'>We start salvaging plasma from [target].</span>")
-
-	while(target.plasma_stored && plasma_stored < xeno_caste.plasma_max)
-		if(!do_after(src, salvage_delay, TRUE, null, BUSY_ICON_HOSTILE) || !check_state())
-			break
-
-		if(!isturf(loc))
-			to_chat(src, "<span class='warning'>We can't absorb plasma from here!</span>")
-			break
-
-		if(get_dist(src, target) > max_range)
-			to_chat(src, "<span class='warning'>We need to be closer to [target].</span>")
-			break
-
-		if(stagger)
-			to_chat(src, "<span class='xenowarning'>Our muscles fail to respond as we try to shake up the shock!</span>")
-			break
-
-		if(target.plasma_stored < amount)
-			amount = target.plasma_stored //Just take it all.
-
-		var/absorbed_amount = round(amount * PLASMA_SALVAGE_MULTIPLIER)
-		target.use_plasma(amount)
-		gain_plasma(absorbed_amount)
-		to_chat(src, "<span class='xenowarning'>We salvage [absorbed_amount] units of plasma from [target]. We have [plasma_stored]/[xeno_caste.plasma_max] stored now.</span>")
-		if(prob(50))
-			playsound(src, "alien_drool", 25)
-
 
 
 /mob/living/carbon/xenomorph/verb/toggle_xeno_mobhud()
@@ -658,8 +594,8 @@
 			to_chat(src, "<span class='warning'>We sense the infected host is saturated with [body_tox.name] and cease our attempt to inoculate it further to preserve the little one inside.</span>")
 			return FALSE
 		do_attack_animation(C)
-		playsound(C, 'sound/effects/spray3.ogg', 15, 1)
-		playsound(C, pick('sound/voice/alien_drool1.ogg', 'sound/voice/alien_drool2.ogg'), 15, 1)
+		playsound(C, 'sound/effects/spray3.ogg', 15, TRUE)
+		playsound(C, "alien_drool", 15, TRUE)
 		C.reagents.add_reagent(toxin, transfer_amount)
 		if(!body_tox) //Let's check this each time because depending on the metabolization rate it can disappear between stings.
 			body_tox = C.reagents.get_reagent(toxin)
@@ -680,14 +616,10 @@
 	return FALSE
 
 /mob/living/carbon/human/can_sting()
+	if(species?.species_flags & IS_SYNTHETIC)
+		return FALSE
 	if(stat != DEAD)
 		return TRUE
-	return FALSE
-
-/mob/living/carbon/human/species/machine/can_sting()
-	return FALSE
-
-/mob/living/carbon/human/species/synthetic/can_sting()
 	return FALSE
 
 /mob/living/carbon/xenomorph/proc/setup_verbs()
@@ -700,18 +632,16 @@
 	. = ..()
 	if(.)
 		return
-	sunder = CLAMP(sunder + adjustment, 0, xeno_caste.sunder_max)
+	sunder = clamp(sunder + adjustment, 0, xeno_caste.sunder_max)
 
 /mob/living/carbon/xenomorph/set_sunder(new_sunder)
 	. = ..()
 	if(.)
 		return
-	sunder = CLAMP(new_sunder, 0, xeno_caste.sunder_max)
+	sunder = clamp(new_sunder, 0, xeno_caste.sunder_max)
 
 /mob/living/carbon/xenomorph/get_sunder()
 	. = ..()
 	if(.)
 		return
 	return (sunder * -0.01) + 1
-
-

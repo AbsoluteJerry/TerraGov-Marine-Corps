@@ -170,21 +170,27 @@ should be alright.
 		if(!istype(B, /obj/item/belt_harness))
 			return FALSE
 	var/obj/item/I = owner.wear_suit
-	if(!istype(I, /obj/item/clothing/suit/storage) && !istype(I, /obj/item/clothing/suit/armor))
+	if(!is_type_in_list(I, list(/obj/item/clothing/suit/storage, /obj/item/clothing/suit/armor, /obj/item/clothing/suit/modular)))
 		return FALSE
 	addtimer(CALLBACK(src, .proc/harness_return, user), 0.3 SECONDS, TIMER_UNIQUE)
 	return TRUE
 
 
 /obj/item/weapon/gun/proc/harness_return(mob/living/carbon/human/user)
-	if(!isturf(loc) || QDELETED(user) || !isnull(user.s_store))
+	if(!isturf(loc) || QDELETED(user) || !isnull(user.s_store) && !isnull(user.back))
 		return
 
-	user.equip_to_slot_if_possible(src, SLOT_S_STORE)
+	user.equip_to_slot_if_possible(src, SLOT_S_STORE, warning = FALSE)
 	if(user.s_store == src)
 		var/obj/item/I = user.wear_suit
 		to_chat(user, "<span class='warning'>[src] snaps into place on [I].</span>")
-	user.update_inv_s_store()
+		user.update_inv_s_store()
+		return
+	
+	user.equip_to_slot_if_possible(src, SLOT_BACK, warning = FALSE)
+	if(user.back == src)
+		to_chat(user, "<span class='warning'>[src] snaps into place on your back.</span>")
+	user.update_inv_back()
 
 
 /obj/item/weapon/gun/attack_self(mob/user)
@@ -247,7 +253,8 @@ should be alright.
 			if(do_after(user,tac_reload_time, TRUE, AM) && loc == user)
 				if(istype(AM.loc, /obj/item/storage))
 					var/obj/item/storage/S = AM.loc
-					S.remove_from_storage(AM)
+					S.remove_from_storage(AM, get_turf(user))
+				user.put_in_any_hand_if_possible(AM)
 				reload(user, AM)
 	else
 		..()
@@ -260,23 +267,6 @@ should be alright.
 				//						 \\
 				//						 \\
 //----------------------------------------------------------
-
-/obj/item/weapon/gun/proc/unique_action(mob/M) //Anything unique the gun can do, like pump or spin or whatever.
-	return FALSE
-
-
-/mob/living/carbon/human/proc/do_unique_action()
-	. = COMSIG_KB_ACTIVATED //The return value must be a flag compatible with the signals triggering this.
-	if(incapacitated() || lying_angle)
-		return
-
-	var/obj/item/weapon/gun/G = get_active_held_item()
-	if(!istype(G))
-		return
-
-	G.unique_action(src)
-
-
 /obj/item/weapon/gun/proc/check_inactive_hand(mob/user)
 	if(user)
 		var/obj/item/weapon/gun/in_hand = user.get_inactive_held_item()
